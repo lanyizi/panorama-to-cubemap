@@ -44,7 +44,10 @@
     <section class="settings">
       <h2>Settings</h2>
       <div>
-        <label>Cube Rotation: <input id="cubeRotation" type="number" min="0" max="359" value="180">°</label>
+        贴图旋转：对于红警3的环境贴图，天空应该处于“十字”的交叉处，因此俯仰一般需要设为90°
+        <label>俯仰：<input id="cube-rotation-pitch" type="number" min="0" max="359" value="90">°</label>
+        <label>偏航：<input id="cube-rotation-yaw" type="number" min="0" max="359" value="0">°</label>
+        <label>滚转：<input id="cube-rotation-roll" type="number" min="0" max="359" value="0">°</label>
       </div>
       <fieldset title="The resampling algorithm to use when generating the cubemap.">
         <legend>Interpolation type</legend>
@@ -78,5 +81,6 @@
   </footer>
 
   <script src="main.js"></script>
+  <script src="convert.js"></script>
 </body>
 </html>
