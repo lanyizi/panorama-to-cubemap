@@ -1,6 +1,3 @@
-const canvas = document.createElement('canvas');
-const ctx = canvas.getContext('2d');
-
 class RadioInput {
   constructor(name, onChange) {
     this.inputs = document.querySelectorAll(`input[name=${name}]`);
@@ -51,9 +48,31 @@ class CubeFace {
   }
 
   setDownload(url, fileExtension) {
+    // this.anchor.href = url;
+    // this.anchor.download = `${this.faceName}.${fileExtension}`;
+    this.img.style.filter = '';
+  }
+}
+
+class HXImage {
+  constructor(url, fileExtension) {
+    this.anchor = document.createElement('a');
+    this.anchor.style.position='absolute';
+    this.anchor.title = 'h-cross';
     this.anchor.href = url;
     this.anchor.download = `${this.faceName}.${fileExtension}`;
-    this.img.style.filter = '';
+
+    this.img = document.createElement('img');
+    this.img.src = url;
+
+    this.anchor.appendChild(this.img);
+
+    this.anchor.style.left = 0;
+    this.anchor.style.top = 0;
+    this.anchor.style.width = '100%';
+    this.anchor.style.height = '100%';
+    this.img.style.width = '100%';
+    this.img.style.height = '100%';
   }
 }
 
@@ -69,11 +88,17 @@ const mimeType = {
 };
 
 function getDataURL(imgData, extension) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
   canvas.width = imgData.width;
   canvas.height = imgData.height;
   ctx.putImageData(imgData, 0, 0);
   return new Promise(resolve => {
-    canvas.toBlob(blob => resolve(URL.createObjectURL(blob)), mimeType[extension], 0.92);
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      objectUrls.push(url);
+      resolve(url);
+    }, mimeType[extension], 0.92);
   });
 }
 
@@ -114,6 +139,8 @@ function loadImage() {
   img.src = URL.createObjectURL(file);
 
   img.addEventListener('load', () => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
     const {width, height} = img;
     canvas.width = width;
     canvas.height = height;
@@ -121,14 +148,24 @@ function loadImage() {
     const data = ctx.getImageData(0, 0, width, height);
 
     processImage(data);
+    URL.revokeObjectURL(img.src);
   });
 }
 
 let finished = 0;
 let workers = [];
+let objectUrls = [];
+let images = [];
+
+function clearObjectUrls() {
+  objectUrls.forEach(x => URL.revokeObjectURL(x));
+  objectUrls = [];
+}
 
 function processImage(data) {
   removeChildren(dom.faces);
+  clearObjectUrls();
+  images = [];
   dom.generating.style.visibility = 'visible';
 
   for (let worker of workers) {
@@ -136,11 +173,11 @@ function processImage(data) {
   }
 
   for (let [faceName, position] of Object.entries(facePositions)) {
-    renderFace(data, faceName, position);
+    renderFace(data, faceName, position, images);
   }
 }
 
-function renderFace(data, faceName, position) {
+function renderFace(data, faceName, position, savedImages) {
   const face = new CubeFace(faceName);
   dom.faces.appendChild(face.anchor);
 
@@ -154,20 +191,22 @@ function renderFace(data, faceName, position) {
 
   // https://stackoverflow.com/questions/21408510/chrome-cant-load-web-worker
   // const worker = new Worker('convert.js');
-  const worker = new Worker(URL.createObjectURL(new Blob(["("+workerScope.toString()+")()"], {type: 'text/javascript'})));
+  const workerBlobUrl = URL.createObjectURL(new Blob(["("+workerScope.toString()+")()"], {type: 'text/javascript'}));
+  objectUrls.push(workerBlobUrl);
+  const worker = new Worker(workerBlobUrl);
 
   const setDownload = ({data: imageData}) => {
     const extension = settings.format.value;
 
     getDataURL(imageData, extension)
       .then(url => face.setDownload(url, extension));
-
+    savedImages.push({ ...position, image: imageData });
     finished++;
 
     if (finished === 6) {
-      dom.generating.style.visibility = 'hidden';
       finished = 0;
       workers = [];
+      generateHX(savedImages, extension);
     }
   };
 
@@ -189,4 +228,27 @@ function renderFace(data, faceName, position) {
   }));
 
   workers.push(worker);
+}
+
+/** 
+ * @param {{ image: ImageData, x: number, y: number }[]} datas 
+ * @param {string} extension
+ */
+ function generateHX(datas, extension) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const faceSize = datas[0].image.width;
+  canvas.width = faceSize * 4;
+  canvas.height = faceSize * 3;
+  for(const { image, x, y } of datas) {
+    ctx.putImageData(image, x * faceSize, y * faceSize);
+  }
+  canvas.toBlob(blob => {
+    removeChildren(dom.faces);
+    clearObjectUrls();
+    const url = URL.createObjectURL(blob);
+    objectUrls.push(url);
+    dom.faces.appendChild(new HXImage(url, extension).anchor);
+    dom.generating.style.visibility = 'hidden';
+  }, mimeType[extension], 0.92);
 }
